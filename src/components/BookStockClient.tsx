@@ -1,84 +1,72 @@
-"use client"; // This ensures the component is client-side
+"use client"; // This makes the component client-side
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import io from "socket.io-client";
-import { Stats } from "@/components/llm-crypto/stats"; // Import your components
-import { BotCard } from "@/components/llm-crypto/message"; // Import your components
+import { BotMessage } from "@/components/llm-crypto/message"; // Assuming BotMessage is a reusable component
 
-type BookStockProps = {
+type BookStockClientProps = {
   isbn: string;
 };
 
-const BookStockClient = ({ isbn }: BookStockProps) => {
-  const socketRef = useRef<any>(null); // WebSocket reference
-  const [accumulatedResponse, setAccumulatedResponse] = useState<string>(""); // For storing responses
-  const [isTyping, setIsTyping] = useState<boolean>(false); // Typing state
+export default function BookStockClient({ isbn }: BookStockClientProps) {
+  const [stockData, setStockData] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Automatically connect to WebSocket when the component loads
   useEffect(() => {
-    const apiKey =
-      "b5e8ef9ef6d6cae0dba610aaf7fb64a8d0be0c9670a9d6b9997dfaceebac53b7";
-    const projectId = "66fcd5fde25ed55561c94997";
-    const organizationId = "65bbe9a448c7789bb0510d83";
-    const bearerToken =
-      "9d6edb24858b00e65b8c449ccb34cdaa15fba96f9e4268fec539b13e4c08173";
+    console.log("Attempting to connect to WebSocket server...");
 
-    // Initialize WebSocket connection
-    socketRef.current = io("https://api.ai12z.net", {
+    const socket = io("wss://api.ai12z.net", {
       transports: ["websocket"],
       query: {
-        apiKey,
-        projectId: projectId.toString(),
-        organizationId,
+        apiKey:
+          "b5e8ef9ef6d6cae0dba610aaf7fb64a8d0be0c9670a9d6b9997dfaceebac53b7",
+        projectId: "66fcd5fde25ed55561c94997",
+        organizationId: "65bbe9a448c7789bb0510d83",
       },
       extraHeaders: {
-        Authorization: `Bearer ${bearerToken}`,
+        Authorization: `Bearer 9d6edb24858b00e65b8c449ccb34cdaa15fba96f9e4268fec539b13e4c08173`,
       },
     });
 
-    // Log when connected
-    socketRef.current.on("connect", () => {
-      console.log(
-        "Connected to AI12Z WebSocket server:",
-        socketRef.current?.id
-      );
-      // Emit request to get book stock data
-      socketRef.current.emit("get_book_stock", { isbn });
+    socket.on("connect", () => {
+      console.log("Connected to AI12Z WebSocket server:", socket.id);
+
+      // Emit the event to get the book stock
+      socket.emit("get_book_stock", { isbn });
     });
 
-    // Handle the WebSocket response
-    socketRef.current.on("response", (data: any) => {
-      setIsTyping(false);
-      setAccumulatedResponse((prev) => prev + data.data);
+    socket.on("response", (data: any) => {
+      console.log("Received response from server:", data);
+      setStockData(data.stock); // Set stock data in state
     });
 
-    // Handle connection errors
-    socketRef.current.on("connect_error", (error: any) => {
+    socket.on("connect_error", (error: any) => {
       console.error("Connection error:", error);
+      setError("Error fetching book stock data");
     });
 
-    // Log disconnect
-    socketRef.current.on("disconnect", () => {
-      console.log("Disconnected from server");
+    socket.on("disconnect", () => {
+      console.log("Disconnected from AI12Z WebSocket server");
     });
 
-    // Clean up the WebSocket connection on component unmount
+    // Cleanup socket connection on component unmount
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        console.log("Disconnected from AI12Z WebSocket server");
-      }
+      console.log("Cleaning up WebSocket connection...");
+      socket.disconnect();
     };
-  }, [isbn]); // Re-run the effect if the isbn changes
+  }, [isbn]);
+
+  if (error) {
+    return <BotMessage>{error}</BotMessage>;
+  }
+
+  if (!stockData) {
+    return <BotMessage>Fetching book stock for ISBN: {isbn}...</BotMessage>;
+  }
 
   return (
-    <BotCard>
-      <Stats
-        name={`Book Stock (ISBN: ${isbn})`}
-        description={accumulatedResponse ? accumulatedResponse : "Loading..."}
-      />
-    </BotCard>
+    <BotMessage>
+      Current stock for ISBN {isbn}: {stockData}
+    </BotMessage>
   );
-};
-
-export default BookStockClient;
+}

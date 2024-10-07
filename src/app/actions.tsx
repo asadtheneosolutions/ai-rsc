@@ -1,6 +1,5 @@
 "use server";
 
-import { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
 import { BotCard, BotMessage } from "@/components/llm-crypto/message";
 import { Price } from "@/components/llm-crypto/price";
@@ -174,6 +173,53 @@ export async function sendMessage(message: string): Promise<{
           );
         },
       },
+      get_microsoft_product_details: {
+        description:
+          "Get the details of a specific Microsoft product. Use this to show the product details to the user.",
+        parameters: z.object({
+          product: z.string().describe("The name of the Microsoft product."),
+        }),
+        generate: async function* ({ product }: { product: string }) {
+          yield (
+            <BotCard>
+              <StatsSkeleton />
+            </BotCard>
+          );
+
+          const productDetails = {
+            name: product,
+            description: `The latest product from Microsoft - ${product}.`,
+            price: "$499",
+            releaseDate: "2024-01-01",
+            features: ["Feature 1", "Feature 2", "Feature 3"],
+          };
+
+          await sleep(1000);
+
+          history.done([
+            ...history.get(),
+            {
+              role: "assistant",
+              name: "get_microsoft_product_details",
+              content: `[Details of ${product}]`,
+            },
+          ]);
+
+          return (
+            <BotCard>
+              <Stats
+                rank={0}
+                totalSupply={0}
+                volume={0}
+                volumeChangePercentage24h={0}
+                marketCap={0}
+                dominance={0}
+                {...productDetails}
+              />
+            </BotCard>
+          );
+        },
+      },
       get_microsoft_stock: {
         description:
           "Get the current stock price of Microsoft. Use this to show the price to the user.",
@@ -235,53 +281,6 @@ export async function sendMessage(message: string): Promise<{
           }
         },
       },
-      get_microsoft_product_details: {
-        description:
-          "Get the details of a specific Microsoft product. Use this to show the product details to the user.",
-        parameters: z.object({
-          product: z.string().describe("The name of the Microsoft product."),
-        }),
-        generate: async function* ({ product }: { product: string }) {
-          yield (
-            <BotCard>
-              <StatsSkeleton />
-            </BotCard>
-          );
-
-          const productDetails = {
-            name: product,
-            description: `The latest product from Microsoft - ${product}.`,
-            price: "$499",
-            releaseDate: "2024-01-01",
-            features: ["Feature 1", "Feature 2", "Feature 3"],
-          };
-
-          await sleep(1000);
-
-          history.done([
-            ...history.get(),
-            {
-              role: "assistant",
-              name: "get_microsoft_product_details",
-              content: `[Details of ${product}]`,
-            },
-          ]);
-
-          return (
-            <BotCard>
-              <Stats
-                rank={0}
-                totalSupply={0}
-                volume={0}
-                volumeChangePercentage24h={0}
-                marketCap={0}
-                dominance={0}
-                {...productDetails}
-              />
-            </BotCard>
-          );
-        },
-      },
       get_book_stock: {
         description:
           "Get the current stock of a specific book. Use this to show the availability of a book to the user.",
@@ -289,8 +288,70 @@ export async function sendMessage(message: string): Promise<{
           isbn: z.string().describe("The ISBN of the book to query."),
         }),
         generate: async function* ({ isbn }: { isbn: string }) {
-          // Render the client-side WebSocket component here
-          yield <BookStockClient isbn={isbn} />;
+          let response = "";
+          let errorOccurred = false;
+
+          // IIFE for establishing the WebSocket connection
+          await (async () => {
+            const socket = io("https://api.ai12z.net", {
+              transports: ["websocket"],
+              query: {
+                apiKey:
+                  "b5e8ef9ef6d6cae0dba610aaf7fb64a8d0be0c9670a9d6b9997dfaceebac53b7",
+                projectId: "66fcd5fde25ed55561c94997",
+                organizationId: "65bbe9a448c7789bb0510d83",
+              },
+              extraHeaders: {
+                Authorization: `Bearer 9d6edb24858b00e65b8c449ccb34cdaa15fba96f9e4268fec539b13e4c08173`,
+              },
+            });
+
+            // Establish the WebSocket connection and handle events
+            socket.on("connect", () => {
+              console.log("Connected to AI12Z WebSocket server:", socket.id);
+
+              // Emit the event to get the book stock
+              socket.emit("get_book_stock", { isbn });
+            });
+
+            // Listen for the server's response
+            socket.on("response", (data: any) => {
+              console.log("Received response from server:", data);
+              response = data.stock;
+            });
+
+            // Handle connection errors
+            socket.on("connect_error", (error: any) => {
+              console.error("Connection error:", error);
+              errorOccurred = true;
+            });
+
+            // Disconnect the socket when done
+            socket.on("disconnect", () => {
+              console.log("Disconnected from AI12Z WebSocket server");
+            });
+
+            // Simulate delay for WebSocket processing
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+
+            // Clean up WebSocket connection
+            socket.disconnect();
+          })();
+
+          // Yield the result based on error state and WebSocket response
+          if (errorOccurred) {
+            yield <BotMessage>Error fetching book stock data</BotMessage>;
+          } else if (response) {
+            yield (
+              <BotMessage>
+                Current stock for ISBN {isbn}: {response}
+              </BotMessage>
+            );
+          } else {
+            yield (
+              <BotMessage>No stock data available for ISBN {isbn}</BotMessage>
+            );
+          }
         },
       },
     },
