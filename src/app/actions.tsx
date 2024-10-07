@@ -1,5 +1,7 @@
 "use server";
 
+import { useEffect, useRef, useState } from "react";
+import io from "socket.io-client";
 import { BotCard, BotMessage } from "@/components/llm-crypto/message";
 import { Price } from "@/components/llm-crypto/price";
 import { PriceSkeleton } from "@/components/llm-crypto/price-skeleton";
@@ -13,6 +15,7 @@ import { MainClient } from "binance";
 import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { z } from "zod";
+import BookStockClient from "@/components/BookStockClient";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -22,12 +25,13 @@ const binance = new MainClient({
 });
 
 const content = `\
-You are a crypto bot and a stock bot. You can help users get the prices of cryptocurrencies and stocks.
+You are a crypto bot and a stock bot. You can help users get the prices of cryptocurrencies, stocks, and books.
 
 Messages inside [] means that it's a UI element or a user event. For example:
 - "[Price of BTC = 69000]" means that the interface of the cryptocurrency price of BTC is shown to the user.
 
 If the user wants the price of a stock, call \`get_microsoft_stock\` to show the price.
+If the user wants book stock, call \`get_book_stock\` to show the book stock.
 If the user wants product details, call \`get_microsoft_product_details\` to show the details.
 If the user wants a cryptocurrency price, call \`get_crypto_price\`.
 If the user wants the market cap or other stats of a cryptocurrency, call \`get_crypto_stats\`.
@@ -176,7 +180,7 @@ export async function sendMessage(message: string): Promise<{
         parameters: z.object({
           symbol: z
             .string()
-            .default("MSFT") // Default to Microsoft stock symbol
+            .default("MSFT")
             .describe("The stock symbol for Microsoft, e.g., MSFT."),
         }),
         generate: async function* ({ symbol }: { symbol: string }) {
@@ -197,7 +201,6 @@ export async function sendMessage(message: string): Promise<{
 
             const data = await response.json();
 
-            // Check if the response contains time series data
             if (!data["Time Series (5min)"]) {
               return (
                 <BotMessage>No stock data available for ${symbol}.</BotMessage>
@@ -245,7 +248,6 @@ export async function sendMessage(message: string): Promise<{
             </BotCard>
           );
 
-          // Mock data for product details (replace with actual API call)
           const productDetails = {
             name: product,
             description: `The latest product from Microsoft - ${product}.`,
@@ -280,6 +282,17 @@ export async function sendMessage(message: string): Promise<{
           );
         },
       },
+      get_book_stock: {
+        description:
+          "Get the current stock of a specific book. Use this to show the availability of a book to the user.",
+        parameters: z.object({
+          isbn: z.string().describe("The ISBN of the book to query."),
+        }),
+        generate: async function* ({ isbn }: { isbn: string }) {
+          // Render the client-side WebSocket component here
+          yield <BookStockClient isbn={isbn} />;
+        },
+      },
     },
     temperature: 0,
   });
@@ -298,7 +311,8 @@ export type AIState = Array<{
     | "get_crypto_price"
     | "get_crypto_stats"
     | "get_microsoft_stock"
-    | "get_microsoft_product_details";
+    | "get_microsoft_product_details"
+    | "get_book_stock";
   role: "user" | "assistant" | "system";
   content: string;
 }>;
@@ -310,7 +324,6 @@ export type UIState = Array<{
   toolInvocations?: ToolInvocation[];
 }>;
 
-// Create the AI provider with the initial states and allowed actions
 export const AI = createAI({
   initialAIState: [] as AIState,
   initialUIState: [] as UIState,
