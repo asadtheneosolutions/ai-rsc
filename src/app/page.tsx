@@ -3,7 +3,7 @@
 import { ChatList } from "@/components/chat-list";
 import { ChatScrollAnchor } from "@/components/chat-scroll-anchor";
 import { UserMessage } from "@/components/llm-crypto/message";
-// import { Button } from "@ai-rsc/components/ui/button";
+import { Button } from "@/components/ui/button";
 import type { ChatInputs } from "@/lib/chat-schema";
 import { useEnterSubmit } from "@/lib/use-enter-submit";
 import { useForm } from "@/lib/use-form";
@@ -59,7 +59,7 @@ export default function Home() {
   }, [inputRef]);
 
   const submitHandler: SubmitHandler<ChatInputs> = async (data) => {
-    const value = data.message.trim();
+    const value: any = data.message.trim();
     formRef.current?.reset();
     if (!value) return;
 
@@ -73,14 +73,14 @@ export default function Home() {
       },
     ]);
 
-    // try {
-    //   // Submit and get response message
-    //   const responseMessage = await sendMessage(value);
-    //   setMessages((currentMessages) => [...currentMessages, responseMessage]);
-    // } catch (error) {
-    //   // You may want to show a toast or trigger an error state.
-    //   console.error(error);
-    // }
+    try {
+      // Submit and get response message
+      const responseMessage: any = await sendMessage(value);
+      setMessages((currentMessages) => [...currentMessages, responseMessage]);
+    } catch (error) {
+      // You may want to show a toast or trigger an error state.
+      console.error(error);
+    }
   };
 
   return (
@@ -107,18 +107,18 @@ export default function Home() {
                   {...form.register("message")}
                 />
                 <div className="absolute right-0 top-4 sm:right-4">
-                  {/* <Button
+                  <Button
                     type="submit"
                     size="icon"
                     disabled={form.watch("message") === ""}
                   >
                     <ArrowDownIcon className="w-5 h-5" />
                     <span className="sr-only">Send message</span>
-                  </Button> */}
+                  </Button>
                 </div>
               </div>
             </form>
-            {/* <Button
+            <Button
               variant="outline"
               size="lg"
               className="p-4 mt-4 rounded-full bg-background"
@@ -129,7 +129,7 @@ export default function Home() {
             >
               <PlusIcon className="w-5 h-5" />
               <span>New Chat</span>
-            </Button> */}
+            </Button>
           </div>
         </div>
       </div>

@@ -11,6 +11,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^0.0.66",
     "@hookform/resolvers": "^3.9.0",
+    "@radix-ui/themes": "^3.1.4",
     "@t3-oss/env-nextjs": "^0.11.1",
     "ai": "^3.4.9",
     "binance": "^2.13.5",
