@@ -1,69 +1,77 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { ChatList } from "@/components/chat-list";
 import { ChatScrollAnchor } from "@/components/chat-scroll-anchor";
-import { UserMessage } from "@/components/llm-crypto/message";
+import { UserMessage, BotMessage } from "@/components/llm-crypto/message";
 import { Button } from "@/components/ui/button";
-import type { ChatInputs } from "@/lib/chat-schema";
 import { useEnterSubmit } from "@/lib/use-enter-submit";
 import { useForm } from "@/lib/use-form";
 import { useActions, useUIState } from "ai/rsc";
 import { ArrowDownIcon, PlusIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
-import type { SubmitHandler } from "react-hook-form";
 import TextareaAutosize from "react-textarea-autosize";
+import { io } from "socket.io-client";
 import type { AI } from "./actions";
 
-/*
-  !-- With language models becoming better at reasoning, we believe that there is a future where
-  !-- developers only write core application specific components while models take care of routing
-  !-- them based on the user's state in an application.
-
-  !-- With generative user interfaces, the language model decides which user interface to render
-  !-- based on the user's state in the application, giving users the flexibility to interact with
-  !-- your application in a conversational manner instead of navigating through a series of predefined routes.
-*/
-
-// Here we can read the streamable UI using the sendMessage Server Action via a function call
-// render the returned UI like any other normal React components.
 export default function Home() {
   const [messages, setMessages] = useUIState<typeof AI>();
   const { sendMessage } = useActions<typeof AI>();
   const { formRef, onKeyDown } = useEnterSubmit();
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const form = useForm<ChatInputs>();
+  const form = useForm<{ message: string }>();
+  const [socket, setSocket] = useState<any>(null);
 
+  // Establish WebSocket connection on mount
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "/") {
-        if (
-          e.target &&
-          ["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).nodeName)
-        ) {
-          return;
-        }
-        e.preventDefault();
-        e.stopPropagation();
-        if (inputRef?.current) {
-          inputRef.current.focus();
-        }
-      }
-    };
+    const socketInstance = io("https://api.ai12z.net", {
+      transports: ["websocket"],
+      query: {
+        apiKey:
+          "b5e8ef9ef6d6cae0dba610aaf7fb64a8d0be0c9670a9d6b9997dfaceebac53b7",
+        projectId: "66fcd5fde25ed55561c94997",
+        organizationId: "65bbe9a448c7789bb0510d83",
+      },
+      extraHeaders: {
+        Authorization: `Bearer 9d6edb24858b00e65b8c449ccb34cdaa15fba96f9e4268fec539b13e4c08173`,
+      },
+    });
 
-    document.addEventListener("keydown", handleKeyDown);
+    socketInstance.on("connect", () => {
+      console.log("Connected to AI12Z WebSocket server:", socketInstance.id);
+    });
 
+    socketInstance.on("response", (data: any) => {
+      console.log("Received response from server:", data);
+      // Add the response to the chat
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: Date.now(),
+          role: "assistant",
+          display: <BotMessage>Book stock: {data.stock}</BotMessage>,
+        },
+      ]);
+    });
+
+    socketInstance.on("disconnect", () => {
+      console.log("Disconnected from WebSocket server");
+    });
+
+    setSocket(socketInstance);
+
+    // Cleanup when component unmounts
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
+      socketInstance.disconnect();
     };
-  }, [inputRef]);
+  }, []);
 
-  const submitHandler: SubmitHandler<ChatInputs> = async (data) => {
-    const value: any = data.message.trim();
+  const submitHandler = async (data: { message: string }) => {
+    const value = data.message.trim();
     formRef.current?.reset();
     if (!value) return;
 
-    // Add user message UI
+    // Add user message to UI
     setMessages((currentMessages) => [
       ...currentMessages,
       {
@@ -73,13 +81,30 @@ export default function Home() {
       },
     ]);
 
+    // Submit the message to the server (server-side logic handled here)
     try {
-      // Submit and get response message
       const responseMessage: any = await sendMessage(value);
       setMessages((currentMessages) => [...currentMessages, responseMessage]);
+
+      if (value.startsWith("/book") && socket) {
+        const isbn = value.split(" ")[1];
+        // Emit event to request book stock from WebSocket
+        socket.emit("get_book_stock", { isbn });
+      }
     } catch (error) {
-      // You may want to show a toast or trigger an error state.
       console.error(error);
+      setMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: Date.now(),
+          role: "assistant",
+          display: (
+            <BotMessage>
+              Error sending message, please try again later.
+            </BotMessage>
+          ),
+        },
+      ]);
     }
   };
 
@@ -89,7 +114,7 @@ export default function Home() {
         <ChatList messages={messages} />
         <ChatScrollAnchor trackVisibility={true} />
       </div>
-      <div className="fixed inset-x-0 bottom-0 w-full bg-gradient-to-b from-muted/30 from-0% to-muted/30 to-50% duration-300 ease-in-out animate-in dark:from-background/10 dark:from-10% dark:to-background/80 peer-[[data-state=open]]:group-[]:lg:pl-[250px] peer-[[data-state=open]]:group-[]:xl:pl-[300px]">
+      <div className="fixed inset-x-0 bottom-0 w-full bg-gradient-to-b from-muted/30 from-0% to-muted/30 to-50% duration-300 ease-in-out animate-in dark:from-background/10 dark:from-10% dark:to-background/80">
         <div className="mx-auto sm:max-w-2xl sm:px-4">
           <div className="px-4 flex justify-center flex-col py-2 space-y-4 border-t shadow-lg bg-background sm:rounded-t-xl sm:border md:py-4 bg-white">
             <form ref={formRef} onSubmit={form.handleSubmit(submitHandler)}>
@@ -97,7 +122,7 @@ export default function Home() {
                 <TextareaAutosize
                   tabIndex={0}
                   onKeyDown={onKeyDown}
-                  placeholder="Send a message."
+                  placeholder="Send a message (e.g., /book ISBN)"
                   className="min-h-[60px] w-full resize-none bg-transparent pl-4 pr-16 py-[1.3rem] focus-within:outline-none sm:text-sm"
                   autoFocus
                   spellCheck={false}
