@@ -1,26 +1,24 @@
-"use server";
+"use server"; // Ensure this code runs on the client side
 
 import { BotMessage } from "@/components/llm-crypto/message";
-import type { ToolInvocation } from "ai";
+import { Loader2 } from "lucide-react";
+import { openai } from "@ai-sdk/openai";
 import { createAI, getMutableAIState, streamUI } from "ai/rsc";
+import type { CoreMessage, ToolInvocation } from "ai";
 import type { ReactNode } from "react";
+import { z } from "zod";
+import Ai12zChatbot from "@/components/Ai12zChatbot"; // Import your component
 
 const content = `\
-You are a crypto bot and a stock bot. You can help users get the prices of cryptocurrencies, stocks, and books.
+You are connected to ai12z via WebSockets. You can help users by fetching data from ai12z.
 
-Messages inside [] means that it's a UI element or a user event. For example:
-- "[Price of BTC = 69000]" means that the interface of the cryptocurrency price of BTC is shown to the user.
+Messages inside [] mean that it's a UI element or a user event.
 
-If the user wants the price of a stock, call \`get_microsoft_stock\` to show the price.
-If the user wants book stock, call \`get_book_stock\` to show the book stock.
-If the user wants product details, call \`get_microsoft_product_details\` to show the details.
-If the user wants a cryptocurrency price, call \`get_crypto_price\`.
-If the user wants the market cap or other stats of a cryptocurrency, call \`get_crypto_stats\`.
+If the user wants data from ai12z, call \`get_ai12z_data\`.
 
 If the user asks for anything outside this set, it is an impossible task, and you should respond that you are a demo and cannot do that.
 `;
 
-// Main sendMessage function (no WebSocket connection here)
 export async function sendMessage(message: string): Promise<{
   id: number;
   role: "user" | "assistant";
@@ -36,46 +34,51 @@ export async function sendMessage(message: string): Promise<{
     },
   ]);
 
-  let reply;
-
-  // Handle user input
-  if (message.startsWith("/book")) {
-    const isbn = message.split(" ")[1];
-
-    // Let the client-side WebSocket handle the actual book stock lookup
-    reply = (
-      <BotMessage>Requesting stock information for ISBN {isbn}...</BotMessage>
-    );
-
-    history.done([
-      ...history.get(),
+  const reply = await streamUI({
+    model: openai("gpt-4o-2024-05-13"),
+    messages: [
       {
-        role: "assistant",
-        name: "get_book_stock",
-        content: `[Requesting stock for ${isbn}]`,
+        role: "system",
+        content,
+        toolInvocations: [],
       },
-    ]);
-  } else {
-    // If the request is not related to books, return an error
-    reply = (
-      <BotMessage>
-        This bot can only handle book stock inquiries. Please use the /book
-        command followed by an ISBN.
+      ...history.get(),
+    ] as CoreMessage[],
+    initial: (
+      <BotMessage className="items-center flex shrink-0 select-none justify-center">
+        <Loader2 className="h-5 w-5 animate-spin stroke-zinc-900" />
       </BotMessage>
-    );
-  }
+    ),
+    text: ({ content, done }) => {
+      if (done)
+        history.done([...history.get(), { role: "assistant", content }]);
+
+      return <BotMessage>{content}</BotMessage>;
+    },
+    tools: {
+      get_ai12z_data: {
+        description: "Get data from ai12z service via WebSockets.",
+        parameters: z.object({}), // No parameters needed
+        generate: function* () {
+          // Return the client-side component
+          return <Ai12zChatbot />;
+        },
+      },
+    },
+    temperature: 0,
+  });
 
   return {
     id: Date.now(),
     role: "assistant" as const,
-    display: reply,
+    display: reply.value,
   };
 }
 
 // Define the AI state and UI state types
 export type AIState = Array<{
   id?: number;
-  name?: "get_book_stock";
+  name?: "get_ai12z_data";
   role: "user" | "assistant" | "system";
   content: string;
 }>;
